@@ -75,6 +75,8 @@ async function writeAndWait(client, functionName, args) {
   const receipt = await readClient.waitForTransactionReceipt({
     hash,
     status: TransactionStatus.FINALIZED,
+    interval: 3000,
+    retries: 120,
     fullTransaction: true,
   });
   assert.notEqual(receipt.txExecutionResultName, "FINISHED_WITH_ERROR", `${functionName} finalized without GenVM error`);

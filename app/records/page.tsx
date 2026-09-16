@@ -60,7 +60,7 @@ export default function RecordsPage() {
       const account = wallet ?? (await connectWallet());
       const result = await executeAccess(account, policyId, accessId, address as `0x${string}`);
       setRecord(typeof result.grant === "string" ? result.grant : JSON.stringify(result.grant, null, 2));
-      setMessage("Access grant receipt accepted and stored.");
+      setMessage(`Access grant receipt accepted and stored (${finalityLabel(result.finality)}).`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -92,6 +92,10 @@ export default function RecordsPage() {
       {record ? <pre className="result-card mt-6 overflow-x-auto text-sm">{record}</pre> : null}
     </main>
   );
+}
+
+function finalityLabel(finality: string) {
+  return finality === "finalized" ? "finalized" : "accepted; contract readback confirmed";
 }
 
 function Field({ id, label, value, setValue }: { id: string; label: string; value: string; setValue: (value: string) => void }) {

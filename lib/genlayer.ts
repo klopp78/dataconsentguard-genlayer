@@ -1,6 +1,6 @@
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
-import { TransactionHashVariant, TransactionStatus } from "genlayer-js/types";
+import { ExecutionResult, TransactionHashVariant, TransactionStatus } from "genlayer-js/types";
 
 declare global {
   interface Window {
@@ -41,6 +41,8 @@ export type AccessInput = {
   licenseProofUrl: string;
   contractAddress?: `0x${string}`;
 };
+
+export type WriteFinality = "finalized" | "accepted-readback";
 
 export function createDataConsentGuardClient(walletAddress?: WalletAddress) {
   return createClient({
@@ -91,14 +93,10 @@ export async function registerPolicy({
     value: BigInt(0),
     leaderOnly: false,
   });
-  const receipt = await client.waitForTransactionReceipt({
-    hash,
-    status: TransactionStatus.FINALIZED,
-    fullTransaction: true,
-  } as never);
+  const { receipt, finality } = await waitForConsensusReceipt(client, hash, "policy registration");
   const policyId = idFromReceipt(receipt, /pol_[a-f0-9]{20}/, "policy");
   const policy = await readPolicy(policyId, { walletAddress, contractAddress: address });
-  return { hash, receipt, policyId, policy };
+  return { hash, receipt, finality, policyId, policy };
 }
 
 export async function requestAccess({
@@ -121,14 +119,10 @@ export async function requestAccess({
     value: BigInt(0),
     leaderOnly: false,
   });
-  const receipt = await client.waitForTransactionReceipt({
-    hash,
-    status: TransactionStatus.FINALIZED,
-    fullTransaction: true,
-  } as never);
+  const { receipt, finality } = await waitForConsensusReceipt(client, hash, "access review");
   const accessId = idFromReceipt(receipt, /acc_[a-f0-9]{20}/, "access");
   const accessReview = await readAccessReview(accessId, { walletAddress, contractAddress: address });
-  return { hash, receipt, accessId, accessReview };
+  return { hash, receipt, finality, accessId, accessReview };
 }
 
 export async function executeAccess(
@@ -147,13 +141,47 @@ export async function executeAccess(
     value: BigInt(0),
     leaderOnly: false,
   });
-  const receipt = await client.waitForTransactionReceipt({
+  const { receipt, finality } = await waitForConsensusReceipt(client, hash, "access execution");
+  const grant = await readGrant(accessId, { walletAddress, contractAddress: address });
+  return { hash, receipt, finality, grant };
+}
+
+async function waitForConsensusReceipt(
+  client: ReturnType<typeof createDataConsentGuardClient>,
+  hash: `0x${string}`,
+  label: string,
+) {
+  try {
+    const receipt = await waitForReceipt(client, hash, TransactionStatus.FINALIZED, 120);
+    assertNoExecutionError(receipt, label);
+    return { receipt, finality: "finalized" as WriteFinality };
+  } catch (finalizedError) {
+    const receipt = await waitForReceipt(client, hash, TransactionStatus.ACCEPTED, 80);
+    assertNoExecutionError(receipt, label);
+    return { receipt, finality: "accepted-readback" as WriteFinality, finalizedError };
+  }
+}
+
+async function waitForReceipt(
+  client: ReturnType<typeof createDataConsentGuardClient>,
+  hash: `0x${string}`,
+  status: TransactionStatus,
+  retries: number,
+) {
+  return client.waitForTransactionReceipt({
     hash,
-    status: TransactionStatus.FINALIZED,
+    status,
+    interval: 3000,
+    retries,
     fullTransaction: true,
   } as never);
-  const grant = await readGrant(accessId, { walletAddress, contractAddress: address });
-  return { hash, receipt, grant };
+}
+
+function assertNoExecutionError(receipt: unknown, label: string) {
+  const resultName = (receipt as { txExecutionResultName?: string })?.txExecutionResultName;
+  if (resultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error(`${label} reached consensus but finished with a contract execution error.`);
+  }
 }
 
 async function readStoredRecord(functionName: string, args: string[], options: ChainReadOptions) {

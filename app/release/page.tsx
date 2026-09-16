@@ -49,7 +49,7 @@ export default function AccessPage() {
         contractAddress: address as `0x${string}`,
       });
       setRecord(typeof result.accessReview === "string" ? result.accessReview : JSON.stringify(result.accessReview, null, 2));
-      setMessage(`Access review accepted: ${result.accessId}`);
+      setMessage(`Access review accepted: ${result.accessId} (${finalityLabel(result.finality)})`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -84,6 +84,10 @@ export default function AccessPage() {
       {record ? <pre className="result-card mt-6 overflow-x-auto text-sm">{record}</pre> : null}
     </main>
   );
+}
+
+function finalityLabel(finality: string) {
+  return finality === "finalized" ? "finalized" : "accepted; contract readback confirmed";
 }
 
 function Field({ id, label, value, setValue }: { id: string; label: string; value: string; setValue: (value: string) => void }) {
