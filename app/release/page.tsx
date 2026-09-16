@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { DATA_CONSENT_GUARD_CONTRACT_ADDRESS, requestAccess, type WalletAddress } from "@/lib/genlayer";
 
 declare global {
@@ -10,13 +11,14 @@ declare global {
 }
 
 export default function AccessPage() {
+  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/02ccc4321e965a26a44d6ee2b6eac455b4b68762/examples";
   const [policyId, setPolicyId] = useState("pol_");
   const [requestKey, setRequestKey] = useState("support-answer-batch-1");
   const [records, setRecords] = useState("120");
-  const [requestUrl, setRequestUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/access-request.md");
-  const [consentProofUrl, setConsentProofUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/consent-proof.md");
-  const [licenseProofUrl, setLicenseProofUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/license-proof.md");
-  const [address, setAddress] = useState(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
+  const [requestUrl, setRequestUrl] = useState(`${pinnedExampleBase}/access-request.md`);
+  const [consentProofUrl, setConsentProofUrl] = useState(`${pinnedExampleBase}/consent-proof.md`);
+  const [licenseProofUrl, setLicenseProofUrl] = useState(`${pinnedExampleBase}/license-proof.md`);
+  const [address, setAddress] = useState<string>(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
   const [wallet, setWallet] = useState<WalletAddress | null>(null);
   const [message, setMessage] = useState("Paste a policy ID and submit access evidence for consensus review.");
   const [record, setRecord] = useState("");
@@ -57,7 +59,7 @@ export default function AccessPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-[#151817]">
-      <a className="pill" href="/">DataConsentGuard</a>
+      <Link className="pill" href="/">DataConsentGuard</Link>
       <h1 className="mt-7 text-4xl font-semibold">Review data access</h1>
       <p className="mt-3 max-w-2xl text-lg leading-8 text-[#52645e]">
         Submit an access request and evidence. The contract stores an approved

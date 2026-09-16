@@ -18,6 +18,12 @@ class AccessVerdict(typing.NamedTuple):
     summary: str
 
 
+TRUSTED_EVIDENCE_HOSTS = (
+    "github.com",
+    "raw.githubusercontent.com",
+)
+
+
 class DataConsentGuard(gl.Contract):
     """Consensus data-consent gate for AI agent access requests."""
 
@@ -294,6 +300,7 @@ def _adjudicate_access(
         },
         "request_key": request_key,
         "requested_records": records,
+        "evidence_sources": evidence_sources,
         "evidence_snapshots": snapshots,
         "evidence_bundle_hash": evidence_bundle_hash,
     }
@@ -317,10 +324,10 @@ Rules:
     normalized = {
         "decision": str(data["decision"]).lower(),
         "confidence": max(0, min(100, int(data["confidence"]))),
-        "purpose_match": bool(data["purpose_match"]),
-        "consent_valid": bool(data["consent_valid"]),
-        "license_allows_use": bool(data["license_allows_use"]),
-        "scope_limited": bool(data["scope_limited"]) and records <= int(policy["remaining_records"]),
+        "purpose_match": _strict_bool(data["purpose_match"], "purpose_match"),
+        "consent_valid": _strict_bool(data["consent_valid"], "consent_valid"),
+        "license_allows_use": _strict_bool(data["license_allows_use"], "license_allows_use"),
+        "scope_limited": _strict_bool(data["scope_limited"], "scope_limited") and records <= int(policy["remaining_records"]),
         "summary": str(data["summary"])[:500],
         "evidence_bundle_hash": str(data["evidence_bundle_hash"]),
         "snapshot_commitments": snapshot_commitments,
@@ -348,10 +355,10 @@ def _parse_access_verdict(raw_json: str) -> AccessVerdict:
     return AccessVerdict(
         decision=decision,
         confidence=u8(confidence),
-        purpose_match=bool(data["purpose_match"]),
-        consent_valid=bool(data["consent_valid"]),
-        license_allows_use=bool(data["license_allows_use"]),
-        scope_limited=bool(data["scope_limited"]),
+        purpose_match=_strict_bool(data["purpose_match"], "purpose_match"),
+        consent_valid=_strict_bool(data["consent_valid"], "consent_valid"),
+        license_allows_use=_strict_bool(data["license_allows_use"], "license_allows_use"),
+        scope_limited=_strict_bool(data["scope_limited"], "scope_limited"),
         evidence_bundle_hash=evidence_bundle_hash,
         snapshot_commitments_json=snapshot_commitments_json,
         summary=summary,
@@ -414,6 +421,7 @@ def _access_sources(request_url: str, consent_proof_url: str, license_proof_url:
 
 def _manifest_entry(index: int, source_type: str, raw_url: str) -> dict:
     host, parts = _url_parts(raw_url)
+    source_commit = _source_commitment(host, parts)
     canonical = "https://" + host + "/" + "/".join(parts)
     return {
         "source_index": index,
@@ -421,6 +429,10 @@ def _manifest_entry(index: int, source_type: str, raw_url: str) -> dict:
         "host": host,
         "canonical_url": canonical,
         "url_hash": _sha256(canonical),
+        "issuer": _source_issuer(host, parts),
+        "source_commit": source_commit,
+        "authenticity_model": "github_commit_pinned_source",
+        "authenticity_hash": _sha256(host + "|" + source_commit + "|" + "/".join(parts)),
     }
 
 
@@ -437,7 +449,37 @@ def _url_parts(raw_url: str) -> typing.Tuple[str, typing.Sequence[str]]:
     parts = [part for part in path.split("/") if len(part) > 0]
     if len(parts) == 0:
         raise Exception("source_path_required")
-    return host.lower(), parts
+    host = host.lower()
+    if host not in TRUSTED_EVIDENCE_HOSTS:
+        raise Exception("evidence_source_must_be_commit_pinned_github")
+    return host, parts
+
+
+def _source_issuer(host: str, parts: typing.Sequence[str]) -> str:
+    if host == "github.com":
+        if len(parts) < 5 or parts[2] != "blob":
+            raise Exception("github_evidence_must_use_blob_commit_path")
+        return parts[0] + "/" + parts[1]
+    if host == "raw.githubusercontent.com":
+        if len(parts) < 4:
+            raise Exception("github_raw_evidence_must_use_commit_path")
+        return parts[0] + "/" + parts[1]
+    raise Exception("unsupported_evidence_issuer")
+
+
+def _source_commitment(host: str, parts: typing.Sequence[str]) -> str:
+    if host == "github.com":
+        commit = parts[3] if len(parts) > 3 else ""
+    elif host == "raw.githubusercontent.com":
+        commit = parts[2] if len(parts) > 2 else ""
+    else:
+        commit = ""
+    if len(commit) != 40:
+        raise Exception("github_evidence_must_pin_40_hex_commit")
+    for char in commit.lower():
+        if char not in "0123456789abcdef":
+            raise Exception("github_evidence_must_pin_40_hex_commit")
+    return commit.lower()
 
 
 def _load_json(raw: str, missing_error: str) -> dict:
@@ -465,6 +507,14 @@ def _parse_positive_amount(value: str, error: str) -> int:
     if amount <= 0:
         raise Exception(error)
     return amount
+
+
+def _strict_bool(value, key: str) -> bool:
+    if value is True:
+        return True
+    if value is False:
+        return False
+    raise Exception("invalid_boolean_" + key)
 
 
 def _policy_id(owner: str, agent: str, name: str, baseline_hash: str) -> str:

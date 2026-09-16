@@ -47,6 +47,10 @@ assert(/gl\.nondet\.exec_prompt/.test(source), "missing validator prompt adjudic
 assert(/hashlib\.sha256/.test(source), "must use collision-resistant SHA-256");
 assert(/baseline_hash/.test(source), "must persist baseline commitment");
 assert(/snapshot_commitments/.test(source), "must persist snapshot commitments");
+assert(/_strict_bool/.test(source), "LLM booleans must be explicitly validated");
+assert(!/[^_]bool\(data\[/.test(source), "bare bool(data[...]) casts are not allowed");
+assert(/github_evidence_must_pin_40_hex_commit/.test(source), "evidence sources must be commit-pinned");
+assert(/authenticity_hash/.test(source), "evidence manifest must bind authenticity metadata");
 assert(/access_requires_approving_receipt/.test(source), "execution must require approved access receipt");
 assert(/execution_exceeds_consent_boundary/.test(source), "execution must enforce consent boundary");
 

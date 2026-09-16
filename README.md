@@ -8,7 +8,9 @@ AI agents increasingly need data access, but a prompt-level promise like "only u
 
 - consent terms, license terms, data manifest, allowed purpose, agent wallet, and record limit are committed at policy registration;
 - request, consent proof, and license proof snapshots are fetched and hashed during review;
+- every evidence URL must be a GitHub commit-pinned source, so the requester cannot swap arbitrary mutable pages after review;
 - validators independently recompute snapshot commitments before accepting an access receipt;
+- LLM boolean fields are type-checked as real JSON booleans before they can influence a receipt;
 - execution requires an approved `acc_*` receipt and refuses duplicate or over-scope grants.
 
 ## Contract
@@ -44,4 +46,15 @@ npm run flow:check
 npm run build
 ```
 
-`contract:check` verifies the contract shape and critical guards. `flow:check` simulates the register-review-grant path and confirms execution depends on an approved receipt.
+`contract:check` verifies the contract shape, source authenticity requirements, strict LLM boolean validation, and critical guards.
+
+`flow:check` is a live Studionet check, not an in-memory simulator. It requires:
+
+```bash
+NEXT_PUBLIC_DATA_CONSENT_GUARD_CONTRACT_ADDRESS=0x...
+DATA_CONSENT_GUARD_PRIVATE_KEY=0x...
+DATA_CONSENT_GUARD_AGENT_PRIVATE_KEY=0x... # optional; defaults to owner key
+npm run flow:check
+```
+
+The live check uses `genlayer-js`, waits for finalized transactions, reads the returned `pol_*` and `acc_*` records back from the deployed contract, and executes the grant if the consensus review is approved.

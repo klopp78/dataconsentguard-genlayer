@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { DATA_CONSENT_GUARD_CONTRACT_ADDRESS, registerPolicy, type WalletAddress } from "@/lib/genlayer";
 
 declare global {
@@ -10,14 +11,15 @@ declare global {
 }
 
 export default function PolicyPage() {
+  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/02ccc4321e965a26a44d6ee2b6eac455b4b68762/examples";
   const [projectName, setProjectName] = useState("Support agent data room");
   const [agentWallet, setAgentWallet] = useState("0x0000000000000000000000000000000000000001");
   const [purpose, setPurpose] = useState("Answer customer support questions using consented helpdesk tickets only.");
   const [maxRecords, setMaxRecords] = useState("500");
-  const [consentUrl, setConsentUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/consent-terms.md");
-  const [licenseUrl, setLicenseUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/data-license.md");
-  const [manifestUrl, setManifestUrl] = useState("https://github.com/klopp78/dataconsentguard-genlayer/blob/main/examples/data-manifest.md");
-  const [address, setAddress] = useState(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
+  const [consentUrl, setConsentUrl] = useState(`${pinnedExampleBase}/consent-terms.md`);
+  const [licenseUrl, setLicenseUrl] = useState(`${pinnedExampleBase}/data-license.md`);
+  const [manifestUrl, setManifestUrl] = useState(`${pinnedExampleBase}/data-manifest.md`);
+  const [address, setAddress] = useState<string>(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
   const [wallet, setWallet] = useState<WalletAddress | null>(null);
   const [message, setMessage] = useState("Connect a browser wallet to register a consent policy.");
   const [record, setRecord] = useState("");
@@ -28,6 +30,9 @@ export default function PolicyPage() {
     const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as WalletAddress[];
     if (!accounts[0]) throw new Error("No wallet account returned.");
     setWallet(accounts[0]);
+    if (agentWallet === "0x0000000000000000000000000000000000000001") {
+      setAgentWallet(accounts[0]);
+    }
     return accounts[0];
   }
 
@@ -59,7 +64,7 @@ export default function PolicyPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-[#151817]">
-      <a className="pill" href="/">DataConsentGuard</a>
+      <Link className="pill" href="/">DataConsentGuard</Link>
       <h1 className="mt-7 text-4xl font-semibold">Register consent policy</h1>
       <p className="mt-3 max-w-2xl text-lg leading-8 text-[#52645e]">
         Bind a data-use purpose, agent wallet, record limit, consent terms,
@@ -68,6 +73,11 @@ export default function PolicyPage() {
       <section className="tool-panel mt-8 grid gap-4">
         <Field id="name" label="Project name" value={projectName} setValue={setProjectName} />
         <Field id="agent" label="Agent wallet" value={agentWallet} setValue={setAgentWallet} />
+        {wallet ? (
+          <button className="action-button w-fit" type="button" onClick={() => setAgentWallet(wallet)}>
+            Use connected wallet as agent
+          </button>
+        ) : null}
         <Field id="purpose" label="Allowed purpose" value={purpose} setValue={setPurpose} />
         <Field id="limit" label="Maximum records" value={maxRecords} setValue={setMaxRecords} />
         <Field id="consent" label="Consent terms URL" value={consentUrl} setValue={setConsentUrl} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   DATA_CONSENT_GUARD_CONTRACT_ADDRESS,
   executeAccess,
@@ -19,7 +20,7 @@ declare global {
 export default function RecordsPage() {
   const [policyId, setPolicyId] = useState("");
   const [accessId, setAccessId] = useState("");
-  const [address, setAddress] = useState(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
+  const [address, setAddress] = useState<string>(DATA_CONSENT_GUARD_CONTRACT_ADDRESS);
   const [wallet, setWallet] = useState<WalletAddress | null>(null);
   const [message, setMessage] = useState("Read a policy, access review, or grant receipt from the deployed contract.");
   const [record, setRecord] = useState("");
@@ -69,7 +70,7 @@ export default function RecordsPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-5 py-10 text-[#151817]">
-      <a className="pill" href="/">DataConsentGuard</a>
+      <Link className="pill" href="/">DataConsentGuard</Link>
       <h1 className="mt-7 text-4xl font-semibold">Inspect and grant access</h1>
       <p className="mt-3 max-w-2xl text-lg leading-8 text-[#52645e]">
         Read the exact on-chain records or execute an approved access receipt.

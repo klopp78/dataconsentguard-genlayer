@@ -1,6 +1,12 @@
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
-import { TransactionStatus } from "genlayer-js/types";
+import { TransactionHashVariant, TransactionStatus } from "genlayer-js/types";
+
+declare global {
+  interface Window {
+    ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+  }
+}
 
 export const DATA_CONSENT_GUARD_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_DATA_CONSENT_GUARD_CONTRACT_ADDRESS ??
@@ -40,6 +46,7 @@ export function createDataConsentGuardClient(walletAddress?: WalletAddress) {
   return createClient({
     chain: studionet,
     account: walletAddress,
+    provider: typeof window !== "undefined" ? window.ethereum : undefined,
   });
 }
 
@@ -47,37 +54,20 @@ function dataConsentGuardAddress(contractAddress?: `0x${string}`) {
   return contractAddress ?? DATA_CONSENT_GUARD_CONTRACT_ADDRESS;
 }
 
+function createReadClient() {
+  return createClient({ chain: studionet });
+}
+
 export async function readPolicy(policyId: string, options: ChainReadOptions = {}) {
-  const client = createDataConsentGuardClient(options.walletAddress);
-  return client.readContract({
-    address: dataConsentGuardAddress(options.contractAddress),
-    functionName: "get_policy",
-    args: [policyId],
-    jsonSafeReturn: true,
-    leaderOnly: true,
-  });
+  return readStoredRecord("get_policy", [policyId], options);
 }
 
 export async function readAccessReview(accessId: string, options: ChainReadOptions = {}) {
-  const client = createDataConsentGuardClient(options.walletAddress);
-  return client.readContract({
-    address: dataConsentGuardAddress(options.contractAddress),
-    functionName: "get_access_review",
-    args: [accessId],
-    jsonSafeReturn: true,
-    leaderOnly: true,
-  });
+  return readStoredRecord("get_access_review", [accessId], options);
 }
 
 export async function readGrant(accessId: string, options: ChainReadOptions = {}) {
-  const client = createDataConsentGuardClient(options.walletAddress);
-  return client.readContract({
-    address: dataConsentGuardAddress(options.contractAddress),
-    functionName: "get_grant",
-    args: [accessId],
-    jsonSafeReturn: true,
-    leaderOnly: true,
-  });
+  return readStoredRecord("get_grant", [accessId], options);
 }
 
 export async function registerPolicy({
@@ -103,9 +93,9 @@ export async function registerPolicy({
   });
   const receipt = await client.waitForTransactionReceipt({
     hash,
-    status: TransactionStatus.ACCEPTED,
+    status: TransactionStatus.FINALIZED,
     fullTransaction: true,
-  });
+  } as never);
   const policyId = idFromReceipt(receipt, /pol_[a-f0-9]{20}/, "policy");
   const policy = await readPolicy(policyId, { walletAddress, contractAddress: address });
   return { hash, receipt, policyId, policy };
@@ -133,9 +123,9 @@ export async function requestAccess({
   });
   const receipt = await client.waitForTransactionReceipt({
     hash,
-    status: TransactionStatus.ACCEPTED,
+    status: TransactionStatus.FINALIZED,
     fullTransaction: true,
-  });
+  } as never);
   const accessId = idFromReceipt(receipt, /acc_[a-f0-9]{20}/, "access");
   const accessReview = await readAccessReview(accessId, { walletAddress, contractAddress: address });
   return { hash, receipt, accessId, accessReview };
@@ -159,25 +149,101 @@ export async function executeAccess(
   });
   const receipt = await client.waitForTransactionReceipt({
     hash,
-    status: TransactionStatus.ACCEPTED,
+    status: TransactionStatus.FINALIZED,
     fullTransaction: true,
-  });
+  } as never);
   const grant = await readGrant(accessId, { walletAddress, contractAddress: address });
   return { hash, receipt, grant };
 }
 
-function idFromReceipt(receipt: unknown, pattern: RegExp, label: string): string {
-  const id = collectStrings(receipt)
-    .map((value) => value.match(pattern)?.[0])
+async function readStoredRecord(functionName: string, args: string[], options: ChainReadOptions) {
+  const client = createReadClient();
+  const address = dataConsentGuardAddress(options.contractAddress);
+  const variants = [TransactionHashVariant.LATEST_FINAL, TransactionHashVariant.LATEST_NONFINAL] as const;
+  let lastError: unknown;
+  for (const transactionHashVariant of variants) {
+    try {
+      const result = await client.readContract({
+        address,
+        functionName,
+        args,
+        jsonSafeReturn: true,
+        transactionHashVariant,
+      });
+      const text = normalizeReadResult(result);
+      if (text.length === 0) throw new Error(`${functionName} returned an empty record.`);
+      return text;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(`Unable to read ${functionName} from ${address}: ${errorMessage(lastError)}`);
+}
+
+function normalizeReadResult(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value);
+}
+
+export function idFromReceipt(receipt: unknown, pattern: RegExp, label: string): string {
+  const id = collectReceiptCandidates(receipt)
+    .map((value) => extractId(value, pattern))
     .find((value): value is string => Boolean(value));
   if (!id) {
-    throw new Error(`Accepted ${label} transaction did not return its ID.`);
+    throw new Error(
+      `Finalized ${label} transaction did not expose its returned ID. Receipt keys: ${Object.keys(
+        (receipt as Record<string, unknown>) ?? {},
+      ).join(", ")}`,
+    );
   }
   return id;
 }
 
-function collectStrings(value: unknown): string[] {
-  if (typeof value === "string") return [value];
+function collectReceiptCandidates(value: unknown): string[] {
+  if (typeof value === "string") return expandStringCandidate(value);
+  if (value instanceof Uint8Array) return expandStringCandidate(new TextDecoder().decode(value));
   if (!value || typeof value !== "object") return [];
-  return Object.values(value as Record<string, unknown>).flatMap(collectStrings);
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
+    const childCandidates = collectReceiptCandidates(child);
+    if (/return|result|receipt|calldata|execution/i.test(key) && typeof child !== "object") {
+      return [...childCandidates, String(child)];
+    }
+    return childCandidates;
+  });
+}
+
+function expandStringCandidate(value: string): string[] {
+  const candidates = [value];
+  const hexDecoded = decodeHexText(value);
+  if (hexDecoded) candidates.push(hexDecoded);
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object") candidates.push(...collectReceiptCandidates(parsed));
+  } catch {
+    // Plain receipt fields are expected.
+  }
+  return candidates;
+}
+
+function extractId(value: string, pattern: RegExp) {
+  return value.match(pattern)?.[0] ?? null;
+}
+
+function decodeHexText(value: string) {
+  if (!/^0x[0-9a-fA-F]+$/.test(value) || value.length < 4 || value.length % 2 !== 0) return null;
+  try {
+    const bytes = value
+      .slice(2)
+      .match(/.{1,2}/g)
+      ?.map((byte) => Number.parseInt(byte, 16));
+    if (!bytes) return null;
+    return new TextDecoder().decode(Uint8Array.from(bytes)).replace(/\0/g, "");
+  } catch {
+    return null;
+  }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
