@@ -11,7 +11,7 @@ declare global {
 }
 
 export default function AccessPage() {
-  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/02ccc4321e965a26a44d6ee2b6eac455b4b68762/examples";
+  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/f6a0287ccf1c37b234e83c86f8f04d4e0e28d1d9/examples";
   const [policyId, setPolicyId] = useState("pol_");
   const [requestKey, setRequestKey] = useState("support-answer-batch-1");
   const [records, setRecords] = useState("120");

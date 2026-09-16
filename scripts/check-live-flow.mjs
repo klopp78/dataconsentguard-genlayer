@@ -7,7 +7,7 @@ const contractAddress = process.env.NEXT_PUBLIC_DATA_CONSENT_GUARD_CONTRACT_ADDR
 const privateKey = process.env.DATA_CONSENT_GUARD_PRIVATE_KEY;
 const agentPrivateKey = process.env.DATA_CONSENT_GUARD_AGENT_PRIVATE_KEY ?? privateKey;
 const exampleBase =
-  "https://github.com/klopp78/dataconsentguard-genlayer/blob/02ccc4321e965a26a44d6ee2b6eac455b4b68762/examples";
+  "https://github.com/klopp78/dataconsentguard-genlayer/blob/f6a0287ccf1c37b234e83c86f8f04d4e0e28d1d9/examples";
 
 if (!contractAddress || !privateKey || !agentPrivateKey) {
   throw new Error(

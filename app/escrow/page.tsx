@@ -11,7 +11,7 @@ declare global {
 }
 
 export default function PolicyPage() {
-  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/02ccc4321e965a26a44d6ee2b6eac455b4b68762/examples";
+  const pinnedExampleBase = "https://github.com/klopp78/dataconsentguard-genlayer/blob/f6a0287ccf1c37b234e83c86f8f04d4e0e28d1d9/examples";
   const [projectName, setProjectName] = useState("Support agent data room");
   const [agentWallet, setAgentWallet] = useState("0x0000000000000000000000000000000000000001");
   const [purpose, setPurpose] = useState("Answer customer support questions using consented helpdesk tickets only.");
